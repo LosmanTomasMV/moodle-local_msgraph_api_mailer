@@ -140,14 +140,6 @@ if (!isset($hassiteconfig) || $hassiteconfig) {
         1
     ));
 
-    $settings->add(new admin_setting_configtext(
-        'local_msgraph_api_mailer/large_attachment_mb',
-        get_string('large_attachment_mb', 'local_msgraph_api_mailer'),
-        get_string('large_attachment_mb_desc', 'local_msgraph_api_mailer'),
-        3,
-        PARAM_INT
-    ));
-
     // Test and Validate section.
     $settings->add(new admin_setting_heading(
         'local_msgraph_api_mailer_test_heading',
