@@ -137,7 +137,8 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
             $mail->isSendmail();
             $mail->Sendmail = local_msgraph_api_mailer_noop_sendmail();
         } else {
-            // Graph API returned non-202; log failure and fall through to SMTP.
+            // Graph API returned non-202. SMTP fallback is disabled by default
+            // in the production fork; only an explicit admin opt-in allows it.
             local_msgraph_api_mailer_log_record(
                 $recipients,
                 $subject,
@@ -152,6 +153,7 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
         }
     } catch (Exception $e) {
         // Graph API threw an exception (e.g. token failure, network error).
+        // SMTP fallback is disabled by default in the production fork.
         local_msgraph_api_mailer_log_record($recipients, $subject, 0, $e->getMessage(), $hasattachment);
         // If SMTP fallback is disabled, prevent PHPMailer from sending too.
         if (!get_config('local_msgraph_api_mailer', 'fallback_smtp')) {
