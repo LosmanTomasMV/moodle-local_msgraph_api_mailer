@@ -32,8 +32,15 @@ namespace local_msgraph_api_mailer\api;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class graph_client {
-    /** @var int Chunk size for upload session: must be a multiple of 320 KB. Using 4 x 320 KB = 1.25 MB. */
-    private const UPLOAD_CHUNK_SIZE = 1310720; // 4 x 327680.
+    /**
+     * Maximum attachment size supported by this production fork.
+     *
+     * Large attachment upload sessions require Mail.ReadWrite because Graph must
+     * create and modify a draft message. This fork deliberately stays on the
+     * least-privilege Mail.Send permission, so attachments above this limit are
+     * rejected instead of using the draft/upload-session flow.
+     */
+    private const MAX_INLINE_ATTACHMENT_BYTES = 2097152; // 2 MiB.
 
     /** @var string Azure AD tenant ID. */
     private $tenantid;
@@ -120,10 +127,8 @@ class graph_client {
      */
     public function send_email($to, $subject, $body, $from = null, $attachments = []) {
         $token              = $this->get_access_token();
-        $senderemail        = trim((string) get_config('local_msgraph_api_mailer', 'sender_email'));
-        $senderdisplayname  = trim((string) get_config('local_msgraph_api_mailer', 'sender_display_name'));
-        $thresholdmb        = max(1, (int) get_config('local_msgraph_api_mailer', 'large_attachment_mb'));
-        $thresholdbytes     = $thresholdmb * 1024 * 1024;
+        $senderemail       = trim((string) get_config('local_msgraph_api_mailer', 'sender_email'));
+        $senderdisplayname = trim((string) get_config('local_msgraph_api_mailer', 'sender_display_name'));
 
         if (empty($senderemail)) {
             throw new \Exception('MS Graph Mailer: Sender email not configured');
@@ -134,9 +139,25 @@ class graph_client {
             $fromaddress['name'] = $senderdisplayname;
         }
 
-        // Process all attachments: load content, detect MIME, fix filename extension.
-        // Returns two lists: small (inline base64) and large (need upload session).
-        [$smallattachments, $largeattachments] = $this->split_attachments($attachments, $thresholdbytes);
+        // Process all attachments using the inline Graph fileAttachment path only.
+        // Large attachment upload sessions are intentionally disabled because they
+        // require Mail.ReadWrite; this fork is designed to use Mail.Send only.
+        [$smallattachments, $largeattachments] = $this->split_attachments(
+            $attachments,
+            self::MAX_INLINE_ATTACHMENT_BYTES
+        );
+
+        if (!empty($largeattachments)) {
+            $largest = 0;
+            foreach ($largeattachments as $attachment) {
+                $largest = max($largest, (int) ($attachment['size'] ?? 0));
+            }
+            throw new \Exception(
+                'MS Graph Mailer: Attachment exceeds the 2 MiB production limit. ' .
+                'Large attachments are disabled to preserve least-privilege Mail.Send access. ' .
+                'Largest attachment: ' . $largest . ' bytes.'
+            );
+        }
 
         $message = [
             'subject'      => $subject,
@@ -149,22 +170,17 @@ class graph_client {
             $message['attachments'] = $smallattachments;
         }
 
-        if (empty($largeattachments)) {
-            // Fast path: single POST to /sendMail.
-            $postdata = json_encode(['message' => $message]);
-            $url      = 'https://graph.microsoft.com/v1.0/users/' . rawurlencode($senderemail) . '/sendMail';
-            $result   = $this->graph_request($url, $token, 'POST', $postdata);
+        // Single POST to /sendMail. No draft is created, so Mail.ReadWrite is not required.
+        $postdata = json_encode(['message' => $message]);
+        $url      = 'https://graph.microsoft.com/v1.0/users/' . rawurlencode($senderemail) . '/sendMail';
+        $result   = $this->graph_request($url, $token, 'POST', $postdata);
 
-            return [
-                'success'   => ($result['http_code'] === 202),
-                'http_code' => $result['http_code'],
-                'response'  => $result['body'],
-                'error'     => $result['error'],
-            ];
-        }
-
-        // Slow path: draft -> upload large attachments -> send.
-        return $this->send_via_draft($token, $senderemail, $message, $largeattachments);
+        return [
+            'success'   => ($result['http_code'] === 202),
+            'http_code' => $result['http_code'],
+            'response'  => $result['body'],
+            'error'     => $result['error'],
+        ];
     }
 
     /**
