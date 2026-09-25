@@ -28,12 +28,19 @@
  * @return bool True if enabled and all required settings are set.
  */
 function local_msgraph_api_mailer_is_enabled() {
+    global $CFG;
+
     if (!get_config('local_msgraph_api_mailer', 'enabled')) {
         return false;
     }
+
+    $clientsecret = !empty($CFG->local_msgraph_api_mailer_client_secret)
+        ? (string) $CFG->local_msgraph_api_mailer_client_secret
+        : (string) get_config('local_msgraph_api_mailer', 'client_secret');
+
     return !empty(get_config('local_msgraph_api_mailer', 'tenant_id'))
         && !empty(get_config('local_msgraph_api_mailer', 'client_id'))
-        && !empty(get_config('local_msgraph_api_mailer', 'client_secret'))
+        && !empty($clientsecret)
         && !empty(get_config('local_msgraph_api_mailer', 'sender_email'));
 }
 
