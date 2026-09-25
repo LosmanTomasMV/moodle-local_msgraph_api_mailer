@@ -83,9 +83,20 @@ class configcheckbox_with_required extends \admin_setting_configcheckbox {
                     $value = (string) get_config($this->plugin, $fieldname);
                 }
 
+                // Production may keep the client secret outside the database.
+                if (
+                    $fieldname === 'client_secret' &&
+                    !empty($GLOBALS['CFG']->local_msgraph_api_mailer_client_secret)
+                ) {
+                    $value = (string) $GLOBALS['CFG']->local_msgraph_api_mailer_client_secret;
+                }
+
                 if (trim($value) === '') {
                     return $this->errormsg;
                 }
+            }
+            if (get_config($this->plugin, 'patch_status') !== 'ok') {
+                return get_string('enabled_requires_patch', 'local_msgraph_api_mailer');
             }
         }
         return parent::write_setting($data);
