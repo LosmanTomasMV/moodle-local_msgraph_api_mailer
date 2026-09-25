@@ -61,9 +61,13 @@ class graph_client {
     public function __construct() {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
-        $this->tenantid     = trim((string) get_config('local_msgraph_api_mailer', 'tenant_id'));
-        $this->clientid     = trim((string) get_config('local_msgraph_api_mailer', 'client_id'));
-        $this->clientsecret = trim((string) get_config('local_msgraph_api_mailer', 'client_secret'));
+        $this->tenantid = trim((string) get_config('local_msgraph_api_mailer', 'tenant_id'));
+        $this->clientid = trim((string) get_config('local_msgraph_api_mailer', 'client_id'));
+        $this->clientsecret = trim(
+            !empty($CFG->local_msgraph_api_mailer_client_secret)
+                ? (string) $CFG->local_msgraph_api_mailer_client_secret
+                : (string) get_config('local_msgraph_api_mailer', 'client_secret')
+        );
     }
 
     /**
