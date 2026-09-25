@@ -51,19 +51,25 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
         return; // Plugin disabled or not configured — fall through to SMTP.
     }
 
-    // Extract recipients, subject, and body from the PHPMailer object.
-    $recipients = array_keys($mail->getAllRecipientAddresses());
-    $subject    = $mail->Subject;
-    // Prefer HTML body; fall back to plain-text body.
-    $body       = !empty($mail->Body) ? $mail->Body : nl2br(htmlspecialchars($mail->AltBody ?? ''));
+    // Preserve PHPMailer's recipient semantics. getAllRecipientAddresses() loses
+    // the distinction between TO, CC and BCC, which can expose BCC recipients.
+    $torecipients  = local_msgraph_api_mailer_normalise_addresses($mail->getToAddresses());
+    $ccrecipients  = local_msgraph_api_mailer_normalise_addresses($mail->getCcAddresses());
+    $bccrecipients = local_msgraph_api_mailer_normalise_addresses($mail->getBccAddresses());
+    $replyto       = local_msgraph_api_mailer_normalise_addresses($mail->getReplyToAddresses());
+    $subject       = $mail->Subject;
 
-    if (empty($recipients) || $subject === '') {
+    // Prefer HTML body; fall back to plain-text body converted to safe HTML.
+    $body = !empty($mail->Body) ? $mail->Body : nl2br(htmlspecialchars($mail->AltBody ?? ''));
+
+    if (empty($torecipients) && empty($ccrecipients) && empty($bccrecipients)) {
         return; // Nothing to send — let PHPMailer proceed.
     }
+    if ($subject === '') {
+        return;
+    }
 
-    // Apply Moodle's email diverting setting ($CFG->divertallemailsto).
-    // This mirrors Moodle core behaviour: all outgoing emails are redirected
-    // to the configured divert address unless the recipient matches an exception.
+    // Apply Moodle's email diverting setting while preserving TO/CC/BCC categories.
     global $CFG;
     if (!empty($CFG->divertallemailsto)) {
         $divertto   = trim($CFG->divertallemailsto);
@@ -71,19 +77,17 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
         if (!empty($CFG->divertallemailsexcept)) {
             $exceptions = preg_split('/[\s,]+/', $CFG->divertallemailsexcept, -1, PREG_SPLIT_NO_EMPTY);
         }
-        $diverted = [];
-        foreach ($recipients as $recipient) {
-            $excepted = false;
-            foreach ($exceptions as $pattern) {
-                if (stripos($recipient, $pattern) !== false) {
-                    $excepted = true;
-                    break;
-                }
-            }
-            $diverted[] = $excepted ? $recipient : $divertto;
-        }
-        $recipients = array_values(array_unique($diverted));
+        $torecipients  = local_msgraph_api_mailer_divert_addresses($torecipients, $divertto, $exceptions);
+        $ccrecipients  = local_msgraph_api_mailer_divert_addresses($ccrecipients, $divertto, $exceptions);
+        $bccrecipients = local_msgraph_api_mailer_divert_addresses($bccrecipients, $divertto, $exceptions);
     }
+
+    // Flatten recipient addresses only for the existing log table.
+    $recipients = local_msgraph_api_mailer_flatten_addresses([
+        $torecipients,
+        $ccrecipients,
+        $bccrecipients,
+    ]);
 
     require_once(__DIR__ . '/classes/api/graph_client.php');
 
@@ -107,7 +111,16 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
 
     try {
         $client = new \local_msgraph_api_mailer\api\graph_client();
-        $result = $client->send_email($recipients, $subject, $body, null, $attachments);
+        $result = $client->send_email(
+            $torecipients,
+            $subject,
+            $body,
+            null,
+            $attachments,
+            $ccrecipients,
+            $bccrecipients,
+            $replyto
+        );
 
         if ($result['success']) {
             // Log successful send (always, when plugin is enabled).
@@ -146,6 +159,77 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
         }
         // If SMTP fallback is enabled, fall through — PHPMailer will attempt SMTP.
     }
+}
+
+/**
+ * Convert a PHPMailer address list to the internal address/name shape.
+ *
+ * @param array $addresses PHPMailer addresses in [email, name] form.
+ * @return array Normalised addresses.
+ */
+function local_msgraph_api_mailer_normalise_addresses(array $addresses): array {
+    $result = [];
+    foreach ($addresses as $address) {
+        $email = trim((string) ($address[0] ?? ''));
+        if ($email === '') {
+            continue;
+        }
+        $item = ['address' => $email];
+        $name = trim((string) ($address[1] ?? ''));
+        if ($name !== '') {
+            $item['name'] = $name;
+        }
+        $result[] = $item;
+    }
+    return $result;
+}
+
+/**
+ * Apply Moodle email diversion to one recipient category.
+ *
+ * @param array $addresses Normalised addresses.
+ * @param string $divertto Divert target address.
+ * @param array $exceptions Exception patterns.
+ * @return array Diverted addresses with duplicates removed.
+ */
+function local_msgraph_api_mailer_divert_addresses(array $addresses, string $divertto, array $exceptions): array {
+    $result = [];
+    $seen = [];
+    foreach ($addresses as $address) {
+        $email = $address['address'];
+        $excepted = false;
+        foreach ($exceptions as $pattern) {
+            if (stripos($email, $pattern) !== false) {
+                $excepted = true;
+                break;
+            }
+        }
+        $target = $excepted ? $address : ['address' => $divertto];
+        $key = strtolower($target['address']);
+        if (!isset($seen[$key])) {
+            $seen[$key] = true;
+            $result[] = $target;
+        }
+    }
+    return $result;
+}
+
+/**
+ * Flatten recipient groups to email strings for the existing log table.
+ *
+ * @param array $groups Recipient groups.
+ * @return array Unique email addresses.
+ */
+function local_msgraph_api_mailer_flatten_addresses(array $groups): array {
+    $result = [];
+    foreach ($groups as $group) {
+        foreach ($group as $address) {
+            if (!empty($address['address'])) {
+                $result[strtolower($address['address'])] = $address['address'];
+            }
+        }
+    }
+    return array_values($result);
 }
 
 /**
