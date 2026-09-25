@@ -52,6 +52,7 @@ if (!isset($hassiteconfig) || $hassiteconfig) {
         'manual_required' => ['warning', 'exclamation-triangle'],
         'failed_readonly' => ['danger', 'times-circle'],
         'failed_anchor' => ['danger', 'times-circle'],
+        'unsupported_core' => ['danger', 'times-circle'],
         'failed_unknown' => ['danger', 'times-circle'],
         'not_readable' => ['danger', 'times-circle'],
         'unknown' => ['info', 'info-circle'],
