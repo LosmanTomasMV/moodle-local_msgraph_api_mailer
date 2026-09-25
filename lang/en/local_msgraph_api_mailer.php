@@ -128,3 +128,4 @@ $string['test_validate'] = 'Test & Validate';
 $string['view_changelog'] = 'Changelog';
 $string['view_email_logs'] = 'View Email Logs';
 $string['task_cleanup_logs'] = 'Delete expired MS Graph mail logs';
+$string['patch_status_unsupported_core'] = '&#10007; This school production fork is currently approved only for Moodle 5.1. The core patch was not applied.';
