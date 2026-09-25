@@ -124,7 +124,13 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
 
         if ($result['success']) {
             // Log successful send (always, when plugin is enabled).
-            local_msgraph_api_mailer_log_record($recipients, $subject, 1, 'Sent via MS Graph API', $hasattachment);
+            local_msgraph_api_mailer_log_record(
+                $recipients,
+                $subject,
+                1,
+                'Accepted by Microsoft Graph (HTTP 202)',
+                $hasattachment
+            );
 
             // Prevent PHPMailer from sending a duplicate via SMTP. The email was
             // already delivered via Graph, so route PHPMailer's transport to an
@@ -139,11 +145,15 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
         } else {
             // Graph API returned non-202. SMTP fallback is disabled by default
             // in the production fork; only an explicit admin opt-in allows it.
+            $failuremessage = 'Microsoft Graph send failed: HTTP ' . (int) $result['http_code'];
+            if (!empty($result['error'])) {
+                $failuremessage .= ' - transport error: ' . substr((string) $result['error'], 0, 200);
+            }
             local_msgraph_api_mailer_log_record(
                 $recipients,
                 $subject,
                 0,
-                'HTTP ' . $result['http_code'] . ' -- ' . substr($result['response'], 0, 500),
+                $failuremessage,
                 $hasattachment
             );
             // If fallback is disabled, also clear recipients to prevent SMTP send.
