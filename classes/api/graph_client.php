@@ -48,10 +48,12 @@ class graph_client {
     private $clientid;
     /** @var string Azure AD client secret. */
     private $clientsecret;
-    /** @var string|null Cached OAuth2 access token. */
-    private $accesstoken;
-    /** @var int Unix timestamp when the cached token expires. */
-    private $tokenexpiry;
+    /** @var string|null Process-local cached OAuth2 access token. */
+    private static $accesstoken = null;
+    /** @var int Unix timestamp when the process-local cached token expires. */
+    private static $tokenexpiry = 0;
+    /** @var string Cache key binding the token to tenant + client ID. */
+    private static $tokencachekey = '';
 
     /**
      * Constructor — reads plugin configuration from Moodle settings.
@@ -71,8 +73,13 @@ class graph_client {
      * @throws \Exception When configuration is missing or token request fails.
      */
     public function get_access_token() {
-        if ($this->accesstoken && time() < $this->tokenexpiry) {
-            return $this->accesstoken;
+        $cachekey = $this->tenantid . ':' . $this->clientid;
+        if (
+            self::$accesstoken &&
+            self::$tokencachekey === $cachekey &&
+            time() < self::$tokenexpiry
+        ) {
+            return self::$accesstoken;
         }
 
         if (empty($this->tenantid) || empty($this->clientid) || empty($this->clientsecret)) {
@@ -107,16 +114,26 @@ class graph_client {
             throw new \Exception('MS Graph Mailer: No access token in response: ' . $response);
         }
 
-        $this->accesstoken = $json['access_token'];
-        $this->tokenexpiry = time() + (($json['expires_in'] ?? 3600) - 300);
+        self::$accesstoken = $json['access_token'];
+        self::$tokenexpiry = time() + max(60, (($json['expires_in'] ?? 3600) - 300));
+        self::$tokencachekey = $cachekey;
 
-        return $this->accesstoken;
+        return self::$accesstoken;
     }
 
     /**
-     * Send an email via Microsoft Graph API.
-     * Automatically routes large attachments (>= threshold) through an upload session
-     * instead of inline base64 to stay within the sendMail payload limit.
+     * Clear the process-local access token cache.
+     *
+     * Used after an HTTP 401 so one fresh token can be requested.
+     */
+    private function invalidate_access_token(): void {
+        self::$accesstoken = null;
+        self::$tokenexpiry = 0;
+        self::$tokencachekey = '';
+    }
+
+    /**
+     * Send an email via Microsoft Graph API using the least-privilege sendMail path.
      *
      * @param string|array $to          TO recipients.
      * @param string       $subject     Email subject.
@@ -222,11 +239,11 @@ class graph_client {
     // Private helpers.
 
     /**
-     * Process raw attachment list: load file content, detect MIME, fix filename.
-     * Split into small (inline base64) and large (upload session) based on threshold.
+     * Process raw attachment list: load file content, detect MIME, fix filename,
+     * and separate supported inline attachments from oversized attachments.
      *
      * @param array $attachments   Raw attachment list from PHPMailer.
-     * @param int   $thresholdbytes Byte size at/above which upload session is used.
+     * @param int   $thresholdbytes Byte size at/above which the attachment is rejected.
      * @return array [smallattachments[], largeattachments[]]
      */
     private function split_attachments($attachments, $thresholdbytes) {
@@ -270,7 +287,7 @@ class graph_client {
             $size = strlen($content);
 
             if ($size >= $thresholdbytes) {
-                // Large: will be uploaded via upload session after draft is created.
+                // Oversized: caller rejects these to preserve Mail.Send-only permissions.
                 $large[] = [
                     'name'     => $name,
                     'mimetype' => $mimetype,
@@ -301,27 +318,75 @@ class graph_client {
      * @return array Array with 'body', 'http_code', and 'error' keys.
      */
     private function graph_request($url, $token, $method, $body) {
-        $headers = [
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json',
-        ];
-        if ($body !== '') {
-            $headers[] = 'Content-Length: ' . strlen($body);
+        $attempt = 0;
+        $refreshedtoken = false;
+        $lastresult = ['body' => '', 'http_code' => 0, 'error' => ''];
+
+        while ($attempt < 3) {
+            $attempt++;
+            $responseheaders = [];
+
+            $headers = [
+                'Authorization: Bearer ' . $token,
+                'Content-Type: application/json',
+            ];
+            if ($body !== '') {
+                $headers[] = 'Content-Length: ' . strlen($body);
+            }
+
+            $curl = new \curl(['proxy' => true]);
+            $options = [
+                'CURLOPT_CUSTOMREQUEST' => $method,
+                'CURLOPT_HTTPHEADER' => $headers,
+                'CURLOPT_CONNECTTIMEOUT' => 5,
+                'CURLOPT_TIMEOUT' => 20,
+                'CURLOPT_HEADERFUNCTION' => static function($handle, $headerline) use (&$responseheaders) {
+                    $length = strlen($headerline);
+                    $parts = explode(':', $headerline, 2);
+                    if (count($parts) === 2) {
+                        $responseheaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                    }
+                    return $length;
+                },
+            ];
+
+            // post() is the Moodle curl method that accepts a raw string body;
+            // CURLOPT_CUSTOMREQUEST selects the required HTTP verb.
+            $resp = $curl->post($url, $body, $options);
+            $httpcode = (int) ($curl->get_info()['http_code'] ?? 0);
+            $curlerr = (string) $curl->error;
+            $lastresult = [
+                'body' => $resp,
+                'http_code' => $httpcode,
+                'error' => $curlerr,
+            ];
+
+            // A stale/invalid token gets exactly one refresh attempt.
+            if ($httpcode === 401 && !$refreshedtoken) {
+                $this->invalidate_access_token();
+                $token = $this->get_access_token();
+                $refreshedtoken = true;
+                continue;
+            }
+
+            // Retry only explicit transient HTTP responses. Network timeouts are
+            // not retried automatically because sendMail may already have been accepted.
+            if (in_array($httpcode, [429, 502, 503, 504], true) && $attempt < 3) {
+                $delay = $attempt === 1 ? 2 : 5;
+                if ($httpcode === 429 && !empty($responseheaders['retry-after'])) {
+                    $retryafter = (int) $responseheaders['retry-after'];
+                    if ($retryafter > 0) {
+                        $delay = min($retryafter, 30);
+                    }
+                }
+                sleep($delay);
+                continue;
+            }
+
+            break;
         }
 
-        $curl    = new \curl(['proxy' => true]);
-        $options = [
-            'CURLOPT_CUSTOMREQUEST' => $method,
-            'CURLOPT_HTTPHEADER'    => $headers,
-            'CURLOPT_TIMEOUT'       => 60,
-        ];
-        // Post() is the only public method that accepts a raw string body.
-        // CURLOPT_CUSTOMREQUEST overrides the HTTP verb to GET/POST/DELETE/etc.
-        $resp     = $curl->post($url, $body, $options);
-        $httpcode = (int) $curl->get_info()['http_code'];
-        $curlerr  = $curl->error;
-
-        return ['body' => $resp, 'http_code' => $httpcode, 'error' => $curlerr];
+        return $lastresult;
     }
 
     /**
