@@ -165,12 +165,14 @@ function send_graph_test_email($email) {
             return ['success' => true, 'message' => get_string('email_sent_success', 'local_msgraph_api_mailer')];
         }
 
-        $errormsg = 'HTTP ' . $result['http_code'] . ' -- ' . substr($result['response'], 0, 500);
+        $errormsg = 'HTTP ' . (int) $result['http_code'];
+        if (!empty($result['error'])) {
+            $errormsg .= ' - transport error: ' . substr((string) $result['error'], 0, 200);
+        }
         local_msgraph_api_mailer_log_record([$email], $subject, 0, $errormsg);
         return [
             'success' => false,
-            'message' => get_string('email_sent_failed', 'local_msgraph_api_mailer') . ' HTTP ' . $result['http_code']
-                . (!empty($result['response']) ? ' — ' . substr(strip_tags($result['response']), 0, 200) : ''),
+            'message' => get_string('email_sent_failed', 'local_msgraph_api_mailer') . ' HTTP ' . (int) $result['http_code'],
         ];
     } catch (Exception $e) {
         local_msgraph_api_mailer_log_record([$email], $subject, 0, $e->getMessage());
@@ -238,12 +240,14 @@ function send_graph_test_email_attachment($email) {
             return ['success' => true, 'message' => get_string('email_attachment_sent_success', 'local_msgraph_api_mailer')];
         }
 
-        $errormsg = 'HTTP ' . $result['http_code'] . ' -- ' . substr($result['response'], 0, 500);
+        $errormsg = 'HTTP ' . (int) $result['http_code'];
+        if (!empty($result['error'])) {
+            $errormsg .= ' - transport error: ' . substr((string) $result['error'], 0, 200);
+        }
         local_msgraph_api_mailer_log_record([$email], $subject, 0, $errormsg, 1);
         return [
             'success' => false,
-            'message' => get_string('email_sent_failed', 'local_msgraph_api_mailer') . ' HTTP ' . $result['http_code']
-                . (!empty($result['response']) ? ' — ' . substr(strip_tags($result['response']), 0, 200) : ''),
+            'message' => get_string('email_sent_failed', 'local_msgraph_api_mailer') . ' HTTP ' . (int) $result['http_code'],
         ];
     } catch (Exception $e) {
         @unlink($tmpfile);
