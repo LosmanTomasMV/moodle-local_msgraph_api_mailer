@@ -96,14 +96,14 @@ function local_msgraph_api_mailer_phpmailer_init($mail) {
     // encoding (3), mimetype (4), isString (5), disposition (6), cid (7).
     $attachments = [];
     foreach ($mail->getAttachments() as $attach) {
-        if (($attach[6] ?? 'attachment') === 'inline') {
-            continue; // Skip embedded images (e.g. logo CIDs).
-        }
+        $disposition = $attach[6] ?? 'attachment';
         $attachments[] = [
             'filepath' => $attach[0], // File path OR raw string content when isstring=true.
             'filename' => $attach[2] ?: basename($attach[0]), // Display name or fallback to basename.
             'mimetype' => $attach[4] ?: 'application/octet-stream',
             'isstring' => !empty($attach[5]),
+            'isinline' => ($disposition === 'inline'),
+            'cid' => (string) ($attach[7] ?? ''),
         ];
     }
 
