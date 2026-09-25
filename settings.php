@@ -133,6 +133,13 @@ if (!isset($hassiteconfig) || $hassiteconfig) {
         1
     ));
 
+    $settings->add(new admin_setting_configduration(
+        'local_msgraph_api_mailer/log_retention',
+        get_string('log_retention', 'local_msgraph_api_mailer'),
+        get_string('log_retention_desc', 'local_msgraph_api_mailer'),
+        90 * DAYSECS
+    ));
+
     $settings->add(new admin_setting_configcheckbox(
         'local_msgraph_api_mailer/fallback_smtp',
         get_string('fallback_smtp', 'local_msgraph_api_mailer'),
