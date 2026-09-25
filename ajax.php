@@ -83,7 +83,10 @@ try {
 function check_graph_permissions() {
     $tenantid     = get_config('local_msgraph_api_mailer', 'tenant_id');
     $clientid     = get_config('local_msgraph_api_mailer', 'client_id');
-    $clientsecret = get_config('local_msgraph_api_mailer', 'client_secret');
+    global $CFG;
+    $clientsecret = !empty($CFG->local_msgraph_api_mailer_client_secret)
+        ? (string) $CFG->local_msgraph_api_mailer_client_secret
+        : get_config('local_msgraph_api_mailer', 'client_secret');
     $senderemail  = get_config('local_msgraph_api_mailer', 'sender_email');
 
     if (empty($tenantid) || empty($clientid) || empty($clientsecret) || empty($senderemail)) {
