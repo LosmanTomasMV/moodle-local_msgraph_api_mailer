@@ -133,6 +133,7 @@ if ($options['apply']) {
         'not_readable' => 'not_readable',
         'not_writable' => 'failed_readonly',
         'anchor_not_found' => 'failed_anchor',
+        'unsupported_core' => 'unsupported_core',
     ];
     set_config('patch_status', $statusmap[$result] ?? 'failed_unknown', 'local_msgraph_api_mailer');
     cli_error('Patch was not applied. Result: ' . $result);
