@@ -298,12 +298,21 @@ class graph_client {
                 ];
             } else {
                 // Small: include inline as base64 in the message body.
-                $small[] = [
+                $graphattachment = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
                     'name'         => $name,
                     'contentType'  => $mimetype,
                     'contentBytes' => base64_encode($content),
                 ];
+
+                if (!empty($attachment['isinline'])) {
+                    $graphattachment['isInline'] = true;
+                    if (!empty($attachment['cid'])) {
+                        $graphattachment['contentId'] = $attachment['cid'];
+                    }
+                }
+
+                $small[] = $graphattachment;
             }
         }
 
