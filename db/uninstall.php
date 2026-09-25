@@ -30,7 +30,25 @@
  * @return bool True on success.
  */
 function xmldb_local_msgraph_api_mailer_uninstall() {
+    global $CFG;
+
     require_once(__DIR__ . '/../lib.php');
-    local_msgraph_api_mailer_remove_phpmailer_patch();
+
+    $filepath = $CFG->dirroot . LOCAL_MSGRAPH_API_MAILER_PHPMAILER_REL;
+    $patchpresent = false;
+    if (is_readable($filepath)) {
+        $content = file_get_contents($filepath);
+        $patchpresent = $content !== false
+            && strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_BEGIN) !== false
+            && strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_END) !== false;
+    }
+
+    if ($patchpresent && !local_msgraph_api_mailer_remove_phpmailer_patch()) {
+        throw new RuntimeException(
+            'MS Graph Mailer cannot be uninstalled while its Moodle core patch remains in place. ' .
+            'Run cli/patch.php --remove and retry the uninstall.'
+        );
+    }
+
     return true;
 }
