@@ -397,6 +397,11 @@ function local_msgraph_api_mailer_write_phpmailer(string $filepath, string $newc
  */
 function local_msgraph_api_mailer_apply_phpmailer_patch(): string {
     global $CFG;
+
+    if ((string) ($CFG->branch ?? '') !== '501') {
+        return 'unsupported_core';
+    }
+
     $filepath = $CFG->dirroot . LOCAL_MSGRAPH_API_MAILER_PHPMAILER_REL;
 
     if (!is_readable($filepath)) {
