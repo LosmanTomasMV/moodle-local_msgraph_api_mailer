@@ -118,14 +118,26 @@ class graph_client {
      * Automatically routes large attachments (>= threshold) through an upload session
      * instead of inline base64 to stay within the sendMail payload limit.
      *
-     * @param string|array $to          Recipient email address or array of addresses.
+     * @param string|array $to          TO recipients.
      * @param string       $subject     Email subject.
      * @param string       $body        HTML email body.
      * @param string|null  $from        Unused — sender is always read from plugin config.
      * @param array        $attachments Optional list of attachment arrays.
+     * @param array        $cc          CC recipients.
+     * @param array        $bcc         BCC recipients.
+     * @param array        $replyto     Reply-To recipients.
      * @return array Result with 'success', 'http_code', 'response', 'error' keys.
      */
-    public function send_email($to, $subject, $body, $from = null, $attachments = []) {
+    public function send_email(
+        $to,
+        $subject,
+        $body,
+        $from = null,
+        $attachments = [],
+        $cc = [],
+        $bcc = [],
+        $replyto = []
+    ) {
         $token              = $this->get_access_token();
         $senderemail       = trim((string) get_config('local_msgraph_api_mailer', 'sender_email'));
         $senderdisplayname = trim((string) get_config('local_msgraph_api_mailer', 'sender_display_name'));
@@ -165,6 +177,16 @@ class graph_client {
             'from'         => ['emailAddress' => $fromaddress],
             'toRecipients' => $this->format_recipients($to),
         ];
+
+        if (!empty($cc)) {
+            $message['ccRecipients'] = $this->format_recipients($cc);
+        }
+        if (!empty($bcc)) {
+            $message['bccRecipients'] = $this->format_recipients($bcc);
+        }
+        if (!empty($replyto)) {
+            $message['replyTo'] = $this->format_recipients($replyto);
+        }
 
         if (!empty($smallattachments)) {
             $message['attachments'] = $smallattachments;
@@ -310,15 +332,30 @@ class graph_client {
      */
     private function format_recipients($recipients) {
         $formatted = [];
-        if (is_array($recipients)) {
-            foreach ($recipients as $email) {
-                if (!empty($email)) {
-                    $formatted[] = ['emailAddress' => ['address' => $email]];
-                }
-            }
-        } else if (!empty($recipients)) {
-            $formatted[] = ['emailAddress' => ['address' => $recipients]];
+        if (!is_array($recipients)) {
+            $recipients = [$recipients];
         }
+
+        foreach ($recipients as $recipient) {
+            if (is_array($recipient)) {
+                $email = trim((string) ($recipient['address'] ?? ''));
+                $name  = trim((string) ($recipient['name'] ?? ''));
+            } else {
+                $email = trim((string) $recipient);
+                $name  = '';
+            }
+
+            if ($email === '') {
+                continue;
+            }
+
+            $emailaddress = ['address' => $email];
+            if ($name !== '') {
+                $emailaddress['name'] = $name;
+            }
+            $formatted[] = ['emailAddress' => $emailaddress];
+        }
+
         return $formatted;
     }
 
