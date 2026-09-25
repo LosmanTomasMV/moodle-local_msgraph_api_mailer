@@ -49,7 +49,7 @@ if (!isset($hassiteconfig) || $hassiteconfig) {
     $patchstatus = get_config('local_msgraph_api_mailer', 'patch_status') ?: 'unknown';
     $statusmap = [
         'ok' => ['success', 'check-circle'],
-        'reapplied' => ['warning', 'refresh'],
+        'manual_required' => ['warning', 'exclamation-triangle'],
         'failed_readonly' => ['danger', 'times-circle'],
         'failed_anchor' => ['danger', 'times-circle'],
         'failed_unknown' => ['danger', 'times-circle'],
