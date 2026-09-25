@@ -137,7 +137,7 @@ if (!isset($hassiteconfig) || $hassiteconfig) {
         'local_msgraph_api_mailer/fallback_smtp',
         get_string('fallback_smtp', 'local_msgraph_api_mailer'),
         get_string('fallback_smtp_desc', 'local_msgraph_api_mailer'),
-        1
+        0
     ));
 
     // Test and Validate section.
