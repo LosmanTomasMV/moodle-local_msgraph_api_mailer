@@ -24,7 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['arch_desc'] = 'This plugin intercepts all Moodle outgoing emails — including direct email_to_user() calls from any feature or plugin — by injecting a hook into lib/phpmailer/moodle_phpmailer.php. The patch is applied on install, removed on uninstall, and automatically re-applied if a Moodle upgrade overwrites the file. On immutable deployments (read-only Docker containers, Git-managed Moodle core, deployment automation) the file may not be writable at runtime; in those environments the patch must be applied as part of your deployment pipeline. The current patch status is shown below.';
+$string['arch_desc'] = 'This plugin intercepts Moodle outgoing emails by adding a small hook to lib/phpmailer/moodle_phpmailer.php. The school production fork never applies or re-applies this core change automatically. After installation and after each Moodle upgrade, review compatibility and use the CLI patch tool explicitly. The current patch status is shown below.';
 $string['arch_heading'] = 'How This Plugin Intercepts Email';
 $string['back_to_settings'] = 'Back to Settings';
 $string['changelog_desc'] = 'Version history for MS Graph API Mailer';
@@ -87,8 +87,8 @@ $string['patch_status_failed_readonly'] = '&#10007; Patch could not be applied: 
 $string['patch_status_failed_unknown'] = '&#10007; Patch failed for an unknown reason. Emails may NOT be intercepted. Check that lib/phpmailer/moodle_phpmailer.php is writable and reload this page.';
 $string['patch_status_label'] = 'Core Patch Status';
 $string['patch_status_not_readable'] = '&#10007; lib/phpmailer/moodle_phpmailer.php is not readable. Patch status cannot be determined. Emails may NOT be intercepted.';
-$string['patch_status_ok'] = '&#10003; Patch is applied — all outgoing Moodle email is being intercepted by this plugin.';
-$string['patch_status_reapplied'] = '&#10003; Patch was re-applied automatically (likely after a Moodle upgrade). All outgoing email is being intercepted.';
+$string['patch_status_ok'] = '&#10003; Patch is applied — outgoing Moodle email can be intercepted by this plugin.';
+$string['patch_status_manual_required'] = '&#9888; Core patch is not applied. Review Moodle compatibility, then run cli/patch.php --apply explicitly.';
 $string['patch_status_unknown'] = 'Patch status not yet determined. It will be checked on the next page load.';
 $string['permission_check_failed'] = '&#10007; Connection failed. Please check your credentials and Azure AD permissions.';
 $string['permission_check_success'] = '&#10003; Connection successful! Mail.Send permission is enabled.';
