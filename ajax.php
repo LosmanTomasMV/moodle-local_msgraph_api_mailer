@@ -72,7 +72,10 @@ try {
 }
 
 /**
- * Test OAuth2 token retrieval (verifies tenant/client credentials and Mail.Send permission).
+ * Test OAuth2 token retrieval only.
+ *
+ * A successful token request proves the tenant/client credentials are usable.
+ * It does NOT prove Mail.Send or Exchange App RBAC access to the configured sender.
  *
  * @package local_msgraph_api_mailer
  * @return array Result array with 'success' and 'message' keys.
@@ -92,16 +95,16 @@ function check_graph_permissions() {
         $result = $client->test_connection();
 
         if ($result['success']) {
-            return ['success' => true, 'message' => get_string('permission_check_success', 'local_msgraph_api_mailer')];
+            return ['success' => true, 'message' => get_string('oauth_check_success', 'local_msgraph_api_mailer')];
         }
         return [
             'success' => false,
-            'message' => get_string('permission_check_failed', 'local_msgraph_api_mailer') . ' ' . $result['message'],
+            'message' => get_string('oauth_check_failed', 'local_msgraph_api_mailer') . ' ' . $result['message'],
         ];
     } catch (Exception $e) {
         return [
             'success' => false,
-            'message' => get_string('permission_check_failed', 'local_msgraph_api_mailer') . ' ' . $e->getMessage(),
+            'message' => get_string('oauth_check_failed', 'local_msgraph_api_mailer') . ' ' . $e->getMessage(),
         ];
     }
 }
