@@ -33,8 +33,10 @@ namespace local_msgraph_api_mailer\hook;
  */
 class after_config_callbacks {
     /**
-     * Re-applies the moodle_phpmailer.php patch automatically if a Moodle
-     * upgrade has overwritten the file since the plugin was installed.
+     * Check patch status without modifying Moodle core.
+     *
+     * A missing patch after an upgrade is reported as manual_required. The
+     * production fork never silently re-applies changes to Moodle core.
      *
      * @param \core\hook\after_config $hook The after_config hook instance.
      */
@@ -47,19 +49,9 @@ class after_config_callbacks {
             $newstatus = 'not_readable';
         } else {
             $content = file_get_contents($filepath);
-            if (strpos($content, "get_plugins_with_function('phpmailer_init')") !== false) {
-                $newstatus = 'ok';
-            } else {
-                // Patch is missing — attempt to re-apply (e.g. after a Moodle upgrade).
-                require_once($CFG->dirroot . '/local/msgraph_api_mailer/lib.php');
-                $result    = local_msgraph_api_mailer_apply_phpmailer_patch();
-                $newstatus = match ($result) {
-                    'ok', 'already_patched' => 'reapplied',
-                    'not_writable'          => 'failed_readonly',
-                    'anchor_not_found'      => 'failed_anchor',
-                    default                 => 'failed_unknown',
-                };
-            }
+            $hasbegin = strpos($content, '// LOCAL_MSGRAPH_API_MAILER_PATCH_BEGIN') !== false;
+            $hasend = strpos($content, '// LOCAL_MSGRAPH_API_MAILER_PATCH_END') !== false;
+            $newstatus = ($hasbegin && $hasend) ? 'ok' : 'manual_required';
         }
 
         // Only write to DB when the status changes to avoid unnecessary writes on every request.
