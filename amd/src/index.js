@@ -48,7 +48,7 @@ define(['jquery', 'core/ajax'], function($, Ajax) {
             $('#check-permissions-btn').on('click', function() {
                 $('#permission-result').html(
                     '<div class="alert alert-info">' +
-                    '<i class="fa fa-spinner fa-spin"></i> Checking permissions...</div>'
+                    '<i class="fa fa-spinner fa-spin"></i> Checking OAuth credentials...</div>'
                 );
                 Ajax.call([{
                     methodname: 'local_msgraph_api_mailer_check_permissions',
