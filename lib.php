@@ -313,8 +313,11 @@ function local_msgraph_api_mailer_cron() {
 /** @var string Relative path (from dirroot) to the file we patch. */
 define('LOCAL_MSGRAPH_API_MAILER_PHPMAILER_REL', '/lib/phpmailer/moodle_phpmailer.php');
 
-/** @var string Unique string present in our injected block — used to detect if already patched. */
-define('LOCAL_MSGRAPH_API_MAILER_PATCH_MARKER', "get_plugins_with_function('phpmailer_init')");
+/** @var string Unique begin marker for the injected block. */
+define('LOCAL_MSGRAPH_API_MAILER_PATCH_BEGIN', '// LOCAL_MSGRAPH_API_MAILER_PATCH_BEGIN');
+
+/** @var string Unique end marker for the injected block. */
+define('LOCAL_MSGRAPH_API_MAILER_PATCH_END', '// LOCAL_MSGRAPH_API_MAILER_PATCH_END');
 
 /**
  * The exact string in postSend()'s else-branch that we use as the injection point.
@@ -325,14 +328,15 @@ define('LOCAL_MSGRAPH_API_MAILER_PATCH_ANCHOR', "        } else {\n            r
 define(
     'LOCAL_MSGRAPH_API_MAILER_PATCH_REPLACEMENT',
     "        } else {\n" .
-    "            // Call phpmailer_init hooks so local plugins can intercept outgoing email\n" .
-    "            // (restored by local_msgraph_api_mailer — remove this plugin to undo).\n" .
+    "            " . LOCAL_MSGRAPH_API_MAILER_PATCH_BEGIN . "\n" .
+    "            // Call phpmailer_init hooks so local plugins can intercept outgoing email.\n" .
     "            \$pluginswithfunction = get_plugins_with_function('phpmailer_init');\n" .
     "            foreach (\$pluginswithfunction as \$plugins) {\n" .
     "                foreach (\$plugins as \$function) {\n" .
     "                    \$function(\$this);\n" .
     "                }\n" .
     "            }\n" .
+    "            " . LOCAL_MSGRAPH_API_MAILER_PATCH_END . "\n" .
     "            return parent::postSend();"
 );
 
@@ -343,7 +347,32 @@ define(
  * @param string $newcontent New file content to write.
  */
 function local_msgraph_api_mailer_write_phpmailer(string $filepath, string $newcontent): void {
-    file_put_contents($filepath, $newcontent);
+    $directory = dirname($filepath);
+    $tempfile = tempnam($directory, '.msgraph-');
+    if ($tempfile === false) {
+        throw new RuntimeException('MS Graph Mailer: Could not create temporary patch file');
+    }
+
+    try {
+        $bytes = file_put_contents($tempfile, $newcontent, LOCK_EX);
+        if ($bytes === false || $bytes !== strlen($newcontent)) {
+            throw new RuntimeException('MS Graph Mailer: Could not write complete temporary patch file');
+        }
+
+        $permissions = @fileperms($filepath);
+        if ($permissions !== false) {
+            @chmod($tempfile, $permissions & 0777);
+        }
+
+        if (!@rename($tempfile, $filepath)) {
+            throw new RuntimeException('MS Graph Mailer: Could not atomically replace moodle_phpmailer.php');
+        }
+    } finally {
+        if (file_exists($tempfile)) {
+            @unlink($tempfile);
+        }
+    }
+
     if (function_exists('opcache_invalidate')) {
         opcache_invalidate($filepath, true);
     }
@@ -369,7 +398,10 @@ function local_msgraph_api_mailer_apply_phpmailer_patch(): string {
 
     $content = file_get_contents($filepath);
 
-    if (strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_MARKER) !== false) {
+    if (
+        strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_BEGIN) !== false &&
+        strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_END) !== false
+    ) {
         return 'already_patched';
     }
 
@@ -408,7 +440,10 @@ function local_msgraph_api_mailer_remove_phpmailer_patch() {
     $content  = file_get_contents($filepath);
     $ok       = true;
 
-    if (strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_MARKER) !== false) {
+    if (
+        strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_BEGIN) !== false &&
+        strpos($content, LOCAL_MSGRAPH_API_MAILER_PATCH_END) !== false
+    ) {
         $restored = str_replace(
             LOCAL_MSGRAPH_API_MAILER_PATCH_REPLACEMENT,
             LOCAL_MSGRAPH_API_MAILER_PATCH_ANCHOR,
@@ -423,5 +458,4 @@ function local_msgraph_api_mailer_remove_phpmailer_patch() {
     return $ok;
 }
 
-// The after_config logic is registered via db/hooks.php using the Moodle 5.x
-// hook system. See classes/hook/after_config_callbacks.php.
+// The after_config hook only checks patch status. It never modifies Moodle core.
