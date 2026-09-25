@@ -96,13 +96,16 @@ class graph_client {
             . '&client_secret=' . rawurlencode($this->clientsecret)
             . '&scope='         . rawurlencode('https://graph.microsoft.com/.default');
 
-        $curl     = new \curl(['proxy' => true]);
+        $curl = new \curl(['proxy' => true]);
+        // Moodle's curl wrapper owns CURLOPT_HTTPHEADER internally. Use setHeader()
+        // so our request headers are not overwritten by filelib.php.
+        $curl->setHeader([
+            'Content-Type: application/x-www-form-urlencoded',
+            'Content-Length: ' . strlen($postdata),
+        ]);
         $response = $curl->post($url, $postdata, [
-            'CURLOPT_HTTPHEADER' => [
-                'Content-Type: application/x-www-form-urlencoded',
-                'Content-Length: ' . strlen($postdata),
-            ],
-            'CURLOPT_TIMEOUT'    => 30,
+            'CURLOPT_CONNECTTIMEOUT' => 5,
+            'CURLOPT_TIMEOUT' => 20,
         ]);
         $httpcode = (int) $curl->get_info()['http_code'];
         $error    = $curl->error;
@@ -339,8 +342,6 @@ class graph_client {
 
         while ($attempt < 3) {
             $attempt++;
-            $responseheaders = [];
-
             $headers = [
                 'Authorization: Bearer ' . $token,
                 'Content-Type: application/json',
@@ -350,19 +351,14 @@ class graph_client {
             }
 
             $curl = new \curl(['proxy' => true]);
+            // Moodle's curl wrapper overwrites CURLOPT_HTTPHEADER and
+            // CURLOPT_HEADERFUNCTION in apply_opt(). Use its public header API
+            // and getResponse() instead.
+            $curl->setHeader($headers);
             $options = [
                 'CURLOPT_CUSTOMREQUEST' => $method,
-                'CURLOPT_HTTPHEADER' => $headers,
                 'CURLOPT_CONNECTTIMEOUT' => 5,
                 'CURLOPT_TIMEOUT' => 20,
-                'CURLOPT_HEADERFUNCTION' => static function($handle, $headerline) use (&$responseheaders) {
-                    $length = strlen($headerline);
-                    $parts = explode(':', $headerline, 2);
-                    if (count($parts) === 2) {
-                        $responseheaders[strtolower(trim($parts[0]))] = trim($parts[1]);
-                    }
-                    return $length;
-                },
             ];
 
             // post() is the Moodle curl method that accepts a raw string body;
@@ -370,6 +366,10 @@ class graph_client {
             $resp = $curl->post($url, $body, $options);
             $httpcode = (int) ($curl->get_info()['http_code'] ?? 0);
             $curlerr = (string) $curl->error;
+            $responseheaders = [];
+            foreach ($curl->getResponse() as $headername => $headervalue) {
+                $responseheaders[strtolower((string) $headername)] = $headervalue;
+            }
             $lastresult = [
                 'body' => $resp,
                 'http_code' => $httpcode,
@@ -389,7 +389,11 @@ class graph_client {
             if (in_array($httpcode, [429, 502, 503, 504], true) && $attempt < 3) {
                 $delay = $attempt === 1 ? 2 : 5;
                 if ($httpcode === 429 && !empty($responseheaders['retry-after'])) {
-                    $retryafter = (int) $responseheaders['retry-after'];
+                    $retryheader = $responseheaders['retry-after'];
+                    if (is_array($retryheader)) {
+                        $retryheader = end($retryheader);
+                    }
+                    $retryafter = (int) $retryheader;
                     if ($retryafter > 0) {
                         $delay = min($retryafter, 30);
                     }
