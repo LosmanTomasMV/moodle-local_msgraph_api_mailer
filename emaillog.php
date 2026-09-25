@@ -66,6 +66,23 @@ if ($filteruntil !== '') {
 
 $wheresql = $where ? implode(' AND ', $where) : '';
 
+/**
+ * Neutralise spreadsheet formula prefixes in exported CSV cells.
+ *
+ * Excel and similar spreadsheet applications may execute values beginning with
+ * =, +, - or @ as formulas when the CSV is opened.
+ *
+ * @param mixed $value Cell value.
+ * @return string Safe CSV cell value.
+ */
+function local_msgraph_api_mailer_csv_safe($value): string {
+    $value = (string) $value;
+    if ($value !== '' && in_array($value[0], ['=', '+', '-', '@'], true)) {
+        return "'" . $value;
+    }
+    return $value;
+}
+
 // CSV export — runs before any page output.
 if ($export) {
     $all = $DB->get_records_select('local_msgraph_api_mailer_log', $wheresql, $params, 'timecreated DESC');
@@ -89,13 +106,13 @@ if ($export) {
         $recipients = json_decode($r->recipients, true);
         $recipients = is_array($recipients) ? implode(', ', $recipients) : $r->recipients;
         fputcsv($fp, [
-            $r->id,
-            $recipients,
-            $r->subject,
-            $r->status ? 'Sent' : 'Failed',
-            !empty($r->has_attachment) ? 'Yes' : 'No',
-            $r->response,
-            date('Y-m-d H:i:s', $r->timecreated),
+            local_msgraph_api_mailer_csv_safe($r->id),
+            local_msgraph_api_mailer_csv_safe($recipients),
+            local_msgraph_api_mailer_csv_safe($r->subject),
+            local_msgraph_api_mailer_csv_safe($r->status ? 'Accepted' : 'Failed'),
+            local_msgraph_api_mailer_csv_safe(!empty($r->has_attachment) ? 'Yes' : 'No'),
+            local_msgraph_api_mailer_csv_safe($r->response),
+            local_msgraph_api_mailer_csv_safe(date('Y-m-d H:i:s', $r->timecreated)),
         ]);
     }
     fclose($fp);
