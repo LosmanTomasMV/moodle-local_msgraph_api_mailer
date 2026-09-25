@@ -41,7 +41,9 @@ $PAGE->requires->js_call_amd('local_msgraph_api_mailer/index', 'init');
 $enabled           = (bool) get_config('local_msgraph_api_mailer', 'enabled');
 $tenantid          = get_config('local_msgraph_api_mailer', 'tenant_id');
 $clientid          = get_config('local_msgraph_api_mailer', 'client_id');
-$clientsecret      = get_config('local_msgraph_api_mailer', 'client_secret');
+$clientsecret      = !empty($CFG->local_msgraph_api_mailer_client_secret)
+    ? (string) $CFG->local_msgraph_api_mailer_client_secret
+    : get_config('local_msgraph_api_mailer', 'client_secret');
 $senderemail       = get_config('local_msgraph_api_mailer', 'sender_email');
 $senderdisplayname = trim((string) get_config('local_msgraph_api_mailer', 'sender_display_name'));
 $isconfigured      = !empty($tenantid) && !empty($clientid) && !empty($clientsecret) && !empty($senderemail);
