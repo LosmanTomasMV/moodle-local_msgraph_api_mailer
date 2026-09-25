@@ -17,8 +17,8 @@
  * MS Graph Mailer - Settings Page Test Functionality.
  *
  * Adds to the settings page:
- *  - Connection status badge (auto-checked on load)
- *  - Check Permissions button
+ *  - OAuth credential status badge (auto-checked on load)
+ *  - Check OAuth credentials button
  *  - Send Test Email button
  *  - Send Test with Attachment button
  *
@@ -57,7 +57,7 @@ define(['jquery', 'core/ajax', 'core/str'], function($, Ajax, str) {
                 return this.addTestSection();
             }).catch(() => {
                 this.strings = {
-                    checkPermissions:       'Check Permissions',
+                    checkPermissions:       'Check OAuth credentials',
                     sendTestEmail:          'Send Test Email',
                     testEmailAddress:       'Test Email Address',
                     testResult:             'Test Result',
@@ -83,7 +83,7 @@ define(['jquery', 'core/ajax', 'core/str'], function($, Ajax, str) {
                 // Connection status badge.
                 '<div id="msgraph-status-row"' +
                 ' style="margin-bottom:14px;display:flex;align-items:center;gap:10px;">' +
-                '<strong style="font-size:.9rem;">Connection Status:</strong>' +
+                '<strong style="font-size:.9rem;">OAuth Credential Status:</strong>' +
                 '<span id="msgraph-status-badge"' +
                 ' style="display:inline-flex;align-items:center;gap:5px;padding:4px 12px;' +
                 'border-radius:20px;font-size:.82rem;font-weight:600;' +
@@ -197,7 +197,7 @@ define(['jquery', 'core/ajax', 'core/str'], function($, Ajax, str) {
          */
         checkPermissions: function() {
             const $result = $('#test-result');
-            $result.html('<div class="alert alert-info py-2">Checking permissions...</div>');
+            $result.html('<div class="alert alert-info py-2">Checking OAuth credentials...</div>');
 
             Ajax.call([{
                 methodname: 'local_msgraph_api_mailer_check_permissions',
