@@ -104,14 +104,16 @@ class graph_client {
         $error    = $curl->error;
 
         if ($httpcode !== 200) {
-            throw new \Exception(
-                "Failed to get access token: HTTP $httpcode - cURL error: $error - Response: $response"
-            );
+            $message = 'MS Graph Mailer: Access token request failed (HTTP ' . $httpcode . ')';
+            if (!empty($error)) {
+                $message .= ' - transport error: ' . substr((string) $error, 0, 200);
+            }
+            throw new \Exception($message);
         }
 
         $json = json_decode($response, true);
         if (!isset($json['access_token'])) {
-            throw new \Exception('MS Graph Mailer: No access token in response: ' . $response);
+            throw new \Exception('MS Graph Mailer: Access token response was invalid or incomplete');
         }
 
         self::$accesstoken = $json['access_token'];
