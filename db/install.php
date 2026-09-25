@@ -23,17 +23,15 @@
  */
 
 /**
- * Plugin install hook — patches moodle_phpmailer.php to restore the
- * phpmailer_init callback that was present in Moodle < 5.x.
+ * Plugin install hook.
+ *
+ * The production fork deliberately does not modify Moodle core during
+ * installation. An administrator must review and apply the core patch explicitly.
  *
  * @package local_msgraph_api_mailer
  * @return bool True on success.
  */
 function xmldb_local_msgraph_api_mailer_install() {
-    global $CFG;
-    require_once($CFG->dirroot . '/local/msgraph_api_mailer/lib.php');
-    $result = local_msgraph_api_mailer_apply_phpmailer_patch();
-    $status = in_array($result, ['ok', 'already_patched']) ? 'ok' : $result;
-    set_config('patch_status', $status, 'local_msgraph_api_mailer');
+    set_config('patch_status', 'manual_required', 'local_msgraph_api_mailer');
     return true;
 }
