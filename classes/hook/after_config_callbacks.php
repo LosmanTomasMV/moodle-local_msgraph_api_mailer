@@ -45,7 +45,7 @@ class after_config_callbacks {
 
         $filepath = $CFG->dirroot . '/lib/phpmailer/moodle_phpmailer.php';
 
-        if ((string) ($CFG->branch ?? '') !== '501') {
+        if (!in_array((string) ($CFG->branch ?? ''), ['501', '503'], true)) {
             $newstatus = 'unsupported_core';
         } else if (!is_readable($filepath)) {
             $newstatus = 'not_readable';
